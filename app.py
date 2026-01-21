@@ -5,7 +5,7 @@ import re
 st.set_page_config(page_title="Smart Contract Checker", page_icon="🔍")
 
 st.title("Smart Contract Checker")
-st.write("Check if an Ethereum address is a smart contract or an externally owned account (EOA).")
+st.write("Check if an address is a smart contract or an externally owned account (EOA).")
 
 # Network selection
 networks = {
@@ -24,13 +24,13 @@ rpc_url = networks[selected_network]
 
 # Address input
 address_input = st.text_input(
-    "Enter Ethereum Address",
+    "Enter Address",
     placeholder="0x...",
-    help="Enter a valid Ethereum address (42 characters starting with 0x)"
+    help="Enter a valid address (42 characters starting with 0x)"
 )
 
 def is_valid_address(address: str) -> bool:
-    """Check if the address is a valid Ethereum address format."""
+    """Check if the address is a valid EVM address format."""
     if not address:
         return False
     return bool(re.match(r"^0x[a-fA-F0-9]{40}$", address))
@@ -61,7 +61,7 @@ def check_smart_contract(rpc_url: str, address: str) -> dict:
 # Check button
 if st.button("Check Address", type="primary"):
     if not is_valid_address(address_input):
-        st.error("Please enter a valid Ethereum address (42 characters starting with 0x)")
+        st.error("Please enter a valid address (42 characters starting with 0x)")
     else:
         with st.spinner("Checking address..."):
             result = check_smart_contract(rpc_url, address_input)
@@ -77,10 +77,10 @@ if st.button("Check Address", type="primary"):
                 with col1:
                     st.metric("Contract Code Size", f"{result['code_size']} bytes")
                 with col2:
-                    st.metric("Balance", f"{result['balance']:.6f} ETH")
+                    st.metric("Balance", f"{result['balance']:.6f}")
             else:
                 st.info("This address is NOT a Smart Contract (EOA)")
-                st.metric("Balance", f"{result['balance']:.6f} ETH")
+                st.metric("Balance", f"{result['balance']:.6f}")
 
             st.code(result["address"], language=None)
 
