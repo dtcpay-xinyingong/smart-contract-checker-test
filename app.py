@@ -161,4 +161,26 @@ if st.button("Check Address", type="primary"):
                     st.caption(result["note"])
 
 st.divider()
-st.caption("Supports EVM networks (Ethereum, Polygon, BSC, etc.) and Tron. A smart contract has bytecode deployed at its address.")
+
+with st.expander("How accurate is this tool?"):
+    st.markdown("""
+    This tool checks if bytecode exists at an address - the same method used by Etherscan and Tronscan.
+
+    **EVM Networks (Ethereum, Polygon, BSC, etc.)**
+    | Scenario | Result | Accurate? |
+    |----------|--------|-----------|
+    | Deployed contract | ✅ Smart Contract | Yes |
+    | Regular wallet | 👛 Wallet | Yes |
+    | Self-destructed contract | 👛 Wallet | Yes (bytecode was deleted) |
+    | CREATE2 pre-computed address | 👛 Wallet | Yes (not yet deployed) |
+    | Proxy contract | ✅ Smart Contract | Yes (but logic lives elsewhere) |
+
+    **Tron**
+    | Scenario | Result | Accurate? |
+    |----------|--------|-----------|
+    | TRC-20/TRC-721 contract | ✅ Smart Contract | Yes |
+    | Regular wallet | 👛 Wallet | Yes |
+    | Never-used address | 👛 Wallet | Yes |
+
+    **Note:** Public RPCs may occasionally timeout or fail. If a network shows "Could not connect", try again.
+    """)
