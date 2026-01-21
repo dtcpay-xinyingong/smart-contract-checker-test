@@ -132,7 +132,7 @@ if st.button("Check Address", type="primary"):
                         if result["is_contract"]:
                             st.write("✅ Smart Contract")
                         else:
-                            st.write("👛 Wallet")
+                            st.write("💰 Wallet")
                     with col3:
                         st.write(f"{result['balance']:.6f}")
 
@@ -153,7 +153,7 @@ if st.button("Check Address", type="primary"):
                     if result["is_contract"]:
                         st.write("✅ Smart Contract")
                     else:
-                        st.write("👛 Wallet")
+                        st.write("💰 Wallet")
                 with col3:
                     st.write(f"{result['balance']:.6f} TRX")
 
@@ -170,17 +170,17 @@ with st.expander("How accurate is this tool?"):
     | Scenario | Result | Accurate? |
     |----------|--------|-----------|
     | Deployed contract | ✅ Smart Contract | Yes |
-    | Regular wallet | 👛 Wallet | Yes |
-    | Self-destructed contract | 👛 Wallet | Yes (bytecode was deleted) |
-    | CREATE2 pre-computed address | 👛 Wallet | Yes (not yet deployed) |
+    | Regular wallet | 💰 Wallet | Yes |
+    | Self-destructed contract | 💰 Wallet | Yes (bytecode was deleted) |
+    | CREATE2 pre-computed address | 💰 Wallet | Yes (not yet deployed) |
     | Proxy contract | ✅ Smart Contract | Yes (but logic lives elsewhere) |
 
     **Tron**
     | Scenario | Result | Accurate? |
     |----------|--------|-----------|
     | TRC-20/TRC-721 contract | ✅ Smart Contract | Yes |
-    | Regular wallet | 👛 Wallet | Yes |
-    | Never-used address | 👛 Wallet | Yes |
+    | Regular wallet | 💰 Wallet | Yes |
+    | Never-used address | 💰 Wallet | Yes |
 
     **Note:** Public RPCs may occasionally timeout or fail. If a network shows "Could not connect", try again.
     """)
