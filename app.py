@@ -1,26 +1,23 @@
 import streamlit as st
 from web3 import Web3
 import re
+import concurrent.futures
 
 st.set_page_config(page_title="Smart Contract Checker", page_icon="🔍")
 
 st.title("Smart Contract Checker")
-st.write("Check if an address is a smart contract or an externally owned account (EOA).")
+st.write("Check if an address is a smart contract or a regular wallet across multiple networks.")
 
-# Network selection
+# Supported networks
 networks = {
-    "Ethereum Mainnet": "https://eth.llamarpc.com",
-    "Sepolia Testnet": "https://rpc.sepolia.org",
-    "Polygon Mainnet": "https://polygon-rpc.com",
-    "BSC Mainnet": "https://bsc-dataseed.binance.org",
-    "Arbitrum One": "https://arb1.arbitrum.io/rpc",
+    "Ethereum": "https://eth.llamarpc.com",
+    "Polygon": "https://polygon-rpc.com",
+    "BSC": "https://bsc-dataseed.binance.org",
+    "Arbitrum": "https://arb1.arbitrum.io/rpc",
     "Optimism": "https://mainnet.optimism.io",
-    "Avalanche C-Chain": "https://api.avax.network/ext/bc/C/rpc",
+    "Avalanche": "https://api.avax.network/ext/bc/C/rpc",
     "Base": "https://mainnet.base.org",
 }
-
-selected_network = st.selectbox("Select Network", options=list(networks.keys()))
-rpc_url = networks[selected_network]
 
 # Address input
 address_input = st.text_input(
@@ -35,54 +32,67 @@ def is_valid_address(address: str) -> bool:
         return False
     return bool(re.match(r"^0x[a-fA-F0-9]{40}$", address))
 
-def check_smart_contract(rpc_url: str, address: str) -> dict:
-    """Check if an address is a smart contract."""
+def check_single_network(network_name: str, rpc_url: str, address: str) -> dict:
+    """Check if an address is a smart contract on a single network."""
     try:
-        w3 = Web3(Web3.HTTPProvider(rpc_url))
+        w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={'timeout': 10}))
 
         if not w3.is_connected():
-            return {"error": "Failed to connect to the network"}
+            return {"network": network_name, "error": "Connection failed"}
 
         checksum_address = Web3.to_checksum_address(address)
         code = w3.eth.get_code(checksum_address)
         balance = w3.eth.get_balance(checksum_address)
 
-        is_contract = len(code) > 0
-
         return {
-            "is_contract": is_contract,
+            "network": network_name,
+            "is_contract": len(code) > 0,
             "code_size": len(code),
             "balance": w3.from_wei(balance, "ether"),
-            "address": checksum_address
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {"network": network_name, "error": str(e)}
+
+def check_all_networks(address: str) -> list:
+    """Check address across all networks in parallel."""
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(networks)) as executor:
+        futures = {
+            executor.submit(check_single_network, name, url, address): name
+            for name, url in networks.items()
+        }
+        for future in concurrent.futures.as_completed(futures):
+            results.append(future.result())
+    return sorted(results, key=lambda x: x["network"])
 
 # Check button
 if st.button("Check Address", type="primary"):
     if not is_valid_address(address_input):
         st.error("Please enter a valid address (42 characters starting with 0x)")
     else:
-        with st.spinner("Checking address..."):
-            result = check_smart_contract(rpc_url, address_input)
+        with st.spinner("Checking across all networks..."):
+            results = check_all_networks(address_input)
 
-        if "error" in result:
-            st.error(f"Error: {result['error']}")
-        else:
-            st.divider()
+        st.divider()
 
-            if result["is_contract"]:
-                st.success("✅ Smart Contract")
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Contract Code Size", f"{result['code_size']} bytes")
-                with col2:
-                    st.metric("Balance", f"{result['balance']:.6f}")
+        # Show checksum address
+        st.code(Web3.to_checksum_address(address_input), language=None)
+
+        # Display results in columns
+        for result in results:
+            if "error" in result:
+                st.warning(f"**{result['network']}**: Could not connect")
             else:
-                st.info("👛 Regular Wallet (EOA)")
-                st.metric("Balance", f"{result['balance']:.6f}")
-
-            st.code(result["address"], language=None)
+                col1, col2, col3 = st.columns([2, 2, 2])
+                with col1:
+                    st.write(f"**{result['network']}**")
+                with col2:
+                    if result["is_contract"]:
+                        st.write("✅ Smart Contract")
+                    else:
+                        st.write("👛 Wallet")
+                with col3:
+                    st.write(f"{result['balance']:.6f}")
 
 st.divider()
-st.caption("A smart contract has bytecode deployed at its address, while an EOA (Externally Owned Account) does not.")
+st.caption("Checks all EVM-compatible networks simultaneously. A smart contract has bytecode deployed at its address.")
