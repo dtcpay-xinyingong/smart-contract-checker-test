@@ -2,14 +2,15 @@ import streamlit as st
 from web3 import Web3
 import re
 import concurrent.futures
+import requests
 
 st.set_page_config(page_title="Smart Contract Checker", page_icon="🔍")
 
 st.title("Smart Contract Checker")
 st.write("Check if an address is a smart contract or a regular wallet across multiple networks.")
 
-# Supported networks
-networks = {
+# EVM networks
+evm_networks = {
     "Ethereum": "https://eth.llamarpc.com",
     "Polygon": "https://polygon-rpc.com",
     "BSC": "https://bsc-dataseed.binance.org",
@@ -22,18 +23,24 @@ networks = {
 # Address input
 address_input = st.text_input(
     "Enter Address",
-    placeholder="0x...",
-    help="Enter a valid address (42 characters starting with 0x)"
+    placeholder="0x... (EVM) or T... (Tron)",
+    help="Enter a valid EVM address (0x...) or Tron address (T...)"
 )
 
-def is_valid_address(address: str) -> bool:
+def is_valid_evm_address(address: str) -> bool:
     """Check if the address is a valid EVM address format."""
     if not address:
         return False
     return bool(re.match(r"^0x[a-fA-F0-9]{40}$", address))
 
-def check_single_network(network_name: str, rpc_url: str, address: str) -> dict:
-    """Check if an address is a smart contract on a single network."""
+def is_valid_tron_address(address: str) -> bool:
+    """Check if the address is a valid Tron address format."""
+    if not address:
+        return False
+    return bool(re.match(r"^T[a-zA-Z0-9]{33}$", address))
+
+def check_evm_network(network_name: str, rpc_url: str, address: str) -> dict:
+    """Check if an address is a smart contract on an EVM network."""
     try:
         w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={'timeout': 10}))
 
@@ -48,18 +55,50 @@ def check_single_network(network_name: str, rpc_url: str, address: str) -> dict:
             "network": network_name,
             "is_contract": len(code) > 0,
             "code_size": len(code),
-            "balance": w3.from_wei(balance, "ether"),
+            "balance": float(w3.from_wei(balance, "ether")),
         }
     except Exception as e:
         return {"network": network_name, "error": str(e)}
 
-def check_all_networks(address: str) -> list:
-    """Check address across all networks in parallel."""
+def check_tron_address(address: str) -> dict:
+    """Check if a Tron address is a smart contract."""
+    try:
+        response = requests.get(
+            f"https://api.trongrid.io/v1/accounts/{address}",
+            timeout=10
+        )
+        data = response.json()
+
+        if not data.get("data") or len(data["data"]) == 0:
+            return {
+                "network": "Tron",
+                "is_contract": False,
+                "balance": 0.0,
+                "note": "Address not found on chain"
+            }
+
+        account = data["data"][0]
+        balance_sun = account.get("balance", 0)
+        balance_trx = balance_sun / 1_000_000
+
+        # Check if it's a contract
+        is_contract = "contract" in account or account.get("is_smart_contract", False)
+
+        return {
+            "network": "Tron",
+            "is_contract": is_contract,
+            "balance": balance_trx,
+        }
+    except Exception as e:
+        return {"network": "Tron", "error": str(e)}
+
+def check_all_evm_networks(address: str) -> list:
+    """Check address across all EVM networks in parallel."""
     results = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=len(networks)) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(evm_networks)) as executor:
         futures = {
-            executor.submit(check_single_network, name, url, address): name
-            for name, url in networks.items()
+            executor.submit(check_evm_network, name, url, address): name
+            for name, url in evm_networks.items()
         }
         for future in concurrent.futures.as_completed(futures):
             results.append(future.result())
@@ -67,21 +106,43 @@ def check_all_networks(address: str) -> list:
 
 # Check button
 if st.button("Check Address", type="primary"):
-    if not is_valid_address(address_input):
-        st.error("Please enter a valid address (42 characters starting with 0x)")
+    is_evm = is_valid_evm_address(address_input)
+    is_tron = is_valid_tron_address(address_input)
+
+    if not is_evm and not is_tron:
+        st.error("Please enter a valid EVM address (0x...) or Tron address (T...)")
     else:
-        with st.spinner("Checking across all networks..."):
-            results = check_all_networks(address_input)
+        if is_evm:
+            with st.spinner("Checking across all EVM networks..."):
+                results = check_all_evm_networks(address_input)
 
-        st.divider()
+            st.divider()
+            st.code(Web3.to_checksum_address(address_input), language=None)
 
-        # Show checksum address
-        st.code(Web3.to_checksum_address(address_input), language=None)
+            for result in results:
+                if "error" in result:
+                    st.warning(f"**{result['network']}**: Could not connect")
+                else:
+                    col1, col2, col3 = st.columns([2, 2, 2])
+                    with col1:
+                        st.write(f"**{result['network']}**")
+                    with col2:
+                        if result["is_contract"]:
+                            st.write("✅ Smart Contract")
+                        else:
+                            st.write("👛 Wallet")
+                    with col3:
+                        st.write(f"{result['balance']:.6f}")
 
-        # Display results in columns
-        for result in results:
+        elif is_tron:
+            with st.spinner("Checking Tron network..."):
+                result = check_tron_address(address_input)
+
+            st.divider()
+            st.code(address_input, language=None)
+
             if "error" in result:
-                st.warning(f"**{result['network']}**: Could not connect")
+                st.error(f"Error: {result['error']}")
             else:
                 col1, col2, col3 = st.columns([2, 2, 2])
                 with col1:
@@ -92,7 +153,10 @@ if st.button("Check Address", type="primary"):
                     else:
                         st.write("👛 Wallet")
                 with col3:
-                    st.write(f"{result['balance']:.6f}")
+                    st.write(f"{result['balance']:.6f} TRX")
+
+                if result.get("note"):
+                    st.caption(result["note"])
 
 st.divider()
-st.caption("Checks all EVM-compatible networks simultaneously. A smart contract has bytecode deployed at its address.")
+st.caption("Supports EVM networks (Ethereum, Polygon, BSC, etc.) and Tron. A smart contract has bytecode deployed at its address.")
