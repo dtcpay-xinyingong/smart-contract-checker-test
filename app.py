@@ -63,26 +63,28 @@ def check_evm_network(network_name: str, rpc_url: str, address: str) -> dict:
 def check_tron_address(address: str) -> dict:
     """Check if a Tron address is a smart contract."""
     try:
-        response = requests.get(
+        # Check if it's a contract using the contract endpoint
+        contract_response = requests.post(
+            "https://api.trongrid.io/wallet/getcontract",
+            json={"value": address, "visible": True},
+            timeout=10
+        )
+        contract_data = contract_response.json()
+
+        # If bytecode exists, it's a contract
+        is_contract = "bytecode" in contract_data and len(contract_data.get("bytecode", "")) > 0
+
+        # Get balance from account endpoint
+        account_response = requests.get(
             f"https://api.trongrid.io/v1/accounts/{address}",
             timeout=10
         )
-        data = response.json()
+        account_data = account_response.json()
 
-        if not data.get("data") or len(data["data"]) == 0:
-            return {
-                "network": "Tron",
-                "is_contract": False,
-                "balance": 0.0,
-                "note": "Address not found on chain"
-            }
-
-        account = data["data"][0]
-        balance_sun = account.get("balance", 0)
-        balance_trx = balance_sun / 1_000_000
-
-        # Check if it's a contract
-        is_contract = "contract" in account or account.get("is_smart_contract", False)
+        balance_trx = 0.0
+        if account_data.get("data") and len(account_data["data"]) > 0:
+            balance_sun = account_data["data"][0].get("balance", 0)
+            balance_trx = balance_sun / 1_000_000
 
         return {
             "network": "Tron",
