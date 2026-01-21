@@ -7,25 +7,20 @@ st.set_page_config(page_title="Smart Contract Checker", page_icon="🔍")
 st.title("Smart Contract Checker")
 st.write("Check if an Ethereum address is a smart contract or an externally owned account (EOA).")
 
-# RPC endpoint input - allows any network
-rpc_url = st.text_input(
-    "RPC URL",
-    value="https://eth.llamarpc.com",
-    help="Enter the RPC URL for any EVM-compatible network"
-)
+# Network selection
+networks = {
+    "Ethereum Mainnet": "https://eth.llamarpc.com",
+    "Sepolia Testnet": "https://rpc.sepolia.org",
+    "Polygon Mainnet": "https://polygon-rpc.com",
+    "BSC Mainnet": "https://bsc-dataseed.binance.org",
+    "Arbitrum One": "https://arb1.arbitrum.io/rpc",
+    "Optimism": "https://mainnet.optimism.io",
+    "Avalanche C-Chain": "https://api.avax.network/ext/bc/C/rpc",
+    "Base": "https://mainnet.base.org",
+}
 
-# Common networks for quick reference
-with st.expander("Common RPC URLs"):
-    st.markdown("""
-    - **Ethereum Mainnet:** `https://eth.llamarpc.com`
-    - **Sepolia Testnet:** `https://rpc.sepolia.org`
-    - **Polygon Mainnet:** `https://polygon-rpc.com`
-    - **BSC Mainnet:** `https://bsc-dataseed.binance.org`
-    - **Arbitrum One:** `https://arb1.arbitrum.io/rpc`
-    - **Optimism:** `https://mainnet.optimism.io`
-    - **Avalanche C-Chain:** `https://api.avax.network/ext/bc/C/rpc`
-    - **Base:** `https://mainnet.base.org`
-    """)
+selected_network = st.selectbox("Select Network", options=list(networks.keys()))
+rpc_url = networks[selected_network]
 
 # Address input
 address_input = st.text_input(
@@ -65,9 +60,7 @@ def check_smart_contract(rpc_url: str, address: str) -> dict:
 
 # Check button
 if st.button("Check Address", type="primary"):
-    if not rpc_url:
-        st.error("Please enter a valid RPC URL")
-    elif not is_valid_address(address_input):
+    if not is_valid_address(address_input):
         st.error("Please enter a valid Ethereum address (42 characters starting with 0x)")
     else:
         with st.spinner("Checking address..."):
