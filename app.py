@@ -72,14 +72,14 @@ if st.button("Check Address", type="primary"):
             st.divider()
 
             if result["is_contract"]:
-                st.success("This address IS a Smart Contract")
+                st.success("✅ Smart Contract")
                 col1, col2 = st.columns(2)
                 with col1:
                     st.metric("Contract Code Size", f"{result['code_size']} bytes")
                 with col2:
                     st.metric("Balance", f"{result['balance']:.6f}")
             else:
-                st.info("This address is NOT a Smart Contract (EOA)")
+                st.info("👛 Regular Wallet (EOA)")
                 st.metric("Balance", f"{result['balance']:.6f}")
 
             st.code(result["address"], language=None)
