@@ -106,59 +106,55 @@ def check_all_evm_networks(address: str) -> list:
             results.append(future.result())
     return sorted(results, key=lambda x: x["network"])
 
-# Check button
-if st.button("Check Address", type="primary"):
-    is_evm = is_valid_evm_address(address_input)
-    is_tron = is_valid_tron_address(address_input)
+# Auto-scan when valid address is entered
+is_evm = is_valid_evm_address(address_input)
+is_tron = is_valid_tron_address(address_input)
 
-    if not is_evm and not is_tron:
-        st.error("Please enter a valid EVM address (0x...) or Tron address (T...)")
-    else:
-        if is_evm:
-            with st.spinner("Checking across all EVM networks..."):
-                results = check_all_evm_networks(address_input)
+if is_evm:
+    with st.spinner("Checking across all EVM networks..."):
+        results = check_all_evm_networks(address_input)
 
-            st.divider()
-            st.code(Web3.to_checksum_address(address_input), language=None)
+    st.divider()
+    st.code(Web3.to_checksum_address(address_input), language=None)
 
-            for result in results:
-                if "error" in result:
-                    st.warning(f"**{result['network']}**: Could not connect")
+    for result in results:
+        if "error" in result:
+            st.warning(f"**{result['network']}**: Could not connect")
+        else:
+            col1, col2, col3 = st.columns([2, 2, 2])
+            with col1:
+                st.write(f"**{result['network']}**")
+            with col2:
+                if result["is_contract"]:
+                    st.write("✅ Smart Contract")
                 else:
-                    col1, col2, col3 = st.columns([2, 2, 2])
-                    with col1:
-                        st.write(f"**{result['network']}**")
-                    with col2:
-                        if result["is_contract"]:
-                            st.write("✅ Smart Contract")
-                        else:
-                            st.write("💰 Wallet")
-                    with col3:
-                        st.write(f"{result['balance']:.6f}")
+                    st.write("💰 Wallet")
+            with col3:
+                st.write(f"{result['balance']:.6f}")
 
-        elif is_tron:
-            with st.spinner("Checking Tron network..."):
-                result = check_tron_address(address_input)
+elif is_tron:
+    with st.spinner("Checking Tron network..."):
+        result = check_tron_address(address_input)
 
-            st.divider()
-            st.code(address_input, language=None)
+    st.divider()
+    st.code(address_input, language=None)
 
-            if "error" in result:
-                st.error(f"Error: {result['error']}")
+    if "error" in result:
+        st.error(f"Error: {result['error']}")
+    else:
+        col1, col2, col3 = st.columns([2, 2, 2])
+        with col1:
+            st.write(f"**{result['network']}**")
+        with col2:
+            if result["is_contract"]:
+                st.write("✅ Smart Contract")
             else:
-                col1, col2, col3 = st.columns([2, 2, 2])
-                with col1:
-                    st.write(f"**{result['network']}**")
-                with col2:
-                    if result["is_contract"]:
-                        st.write("✅ Smart Contract")
-                    else:
-                        st.write("💰 Wallet")
-                with col3:
-                    st.write(f"{result['balance']:.6f} TRX")
+                st.write("💰 Wallet")
+        with col3:
+            st.write(f"{result['balance']:.6f} TRX")
 
-                if result.get("note"):
-                    st.caption(result["note"])
+        if result.get("note"):
+            st.caption(result["note"])
 
 st.divider()
 
