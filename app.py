@@ -132,6 +132,16 @@ if is_evm:
             with col3:
                 st.write(f"{result['balance']:.6f}")
 
+    # Summary
+    successful_results = [r for r in results if "error" not in r]
+    if successful_results:
+        is_any_contract = any(r["is_contract"] for r in successful_results)
+        st.divider()
+        if is_any_contract:
+            st.success("**Summary:** This address is a **Smart Contract** on at least one network.")
+        else:
+            st.info("**Summary:** This address is a **Wallet** (not a smart contract on any checked network).")
+
 elif is_tron:
     with st.spinner("Checking Tron network..."):
         result = check_tron_address(address_input)
@@ -155,6 +165,13 @@ elif is_tron:
 
         if result.get("note"):
             st.caption(result["note"])
+
+        # Summary
+        st.divider()
+        if result["is_contract"]:
+            st.success("**Summary:** This address is a **Smart Contract**.")
+        else:
+            st.info("**Summary:** This address is a **Wallet** (not a smart contract).")
 
 st.divider()
 
