@@ -198,7 +198,7 @@ def get_evm_tx_sender(network_name: str, rpc_url: str, tx_hash: str) -> dict:
 
         tx = w3.eth.get_transaction(tx_hash)
 
-        from_address = tx["from"]
+        from_address = Web3.to_checksum_address(tx["from"])
         to_address = tx.get("to")
         is_erc4337 = False
 
