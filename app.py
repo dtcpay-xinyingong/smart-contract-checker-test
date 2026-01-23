@@ -51,11 +51,24 @@ def check_evm_network(network_name: str, rpc_url: str, address: str) -> dict:
         code = w3.eth.get_code(checksum_address)
         balance = w3.eth.get_balance(checksum_address)
 
+        is_contract = len(code) > 0
+        code_size = len(code)
+        bal = float(w3.from_wei(balance, "ether"))
+
+        # Calculate confidence score
+        if is_contract:
+            confidence = 100  # Bytecode exists = definitely a contract
+        elif bal > 0:
+            confidence = 95  # No code but has balance = very likely a wallet
+        else:
+            confidence = 75  # No code, no balance = could be unused or CREATE2 pending
+
         return {
             "network": network_name,
-            "is_contract": len(code) > 0,
-            "code_size": len(code),
-            "balance": float(w3.from_wei(balance, "ether")),
+            "is_contract": is_contract,
+            "code_size": code_size,
+            "balance": bal,
+            "confidence": confidence,
         }
     except Exception as e:
         return {"network": network_name, "error": str(e)}
@@ -86,10 +99,19 @@ def check_tron_address(address: str) -> dict:
             balance_sun = account_data["data"][0].get("balance", 0)
             balance_trx = balance_sun / 1_000_000
 
+        # Calculate confidence score
+        if is_contract:
+            confidence = 100  # Bytecode exists = definitely a contract
+        elif balance_trx > 0:
+            confidence = 95  # No code but has balance = very likely a wallet
+        else:
+            confidence = 75  # No code, no balance = could be unused address
+
         return {
             "network": "Tron",
             "is_contract": is_contract,
             "balance": balance_trx,
+            "confidence": confidence,
         }
     except Exception as e:
         return {"network": "Tron", "error": str(e)}
@@ -121,7 +143,7 @@ if is_evm:
         if "error" in result:
             st.warning(f"**{result['network']}**: Could not connect")
         else:
-            col1, col2, col3 = st.columns([2, 2, 2])
+            col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
             with col1:
                 st.write(f"**{result['network']}**")
             with col2:
@@ -130,17 +152,20 @@ if is_evm:
                 else:
                     st.write("💰 Wallet")
             with col3:
+                st.write(f"{result['confidence']}%")
+            with col4:
                 st.write(f"{result['balance']:.6f}")
 
     # Summary
     successful_results = [r for r in results if "error" not in r]
     if successful_results:
         is_any_contract = any(r["is_contract"] for r in successful_results)
+        avg_confidence = sum(r["confidence"] for r in successful_results) / len(successful_results)
         st.divider()
         if is_any_contract:
-            st.success("**Summary:** This address is a **Smart Contract** on at least one network.")
+            st.success(f"**Summary:** This address is a **Smart Contract** on at least one network. (Confidence: {avg_confidence:.0f}%)")
         else:
-            st.info("**Summary:** This address is a **Wallet** (not a smart contract on any checked network).")
+            st.info(f"**Summary:** This address is a **Wallet** (not a smart contract on any checked network). (Confidence: {avg_confidence:.0f}%)")
 
 elif is_tron:
     with st.spinner("Checking Tron network..."):
@@ -152,7 +177,7 @@ elif is_tron:
     if "error" in result:
         st.error(f"Error: {result['error']}")
     else:
-        col1, col2, col3 = st.columns([2, 2, 2])
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
         with col1:
             st.write(f"**{result['network']}**")
         with col2:
@@ -161,6 +186,8 @@ elif is_tron:
             else:
                 st.write("💰 Wallet")
         with col3:
+            st.write(f"{result['confidence']}%")
+        with col4:
             st.write(f"{result['balance']:.6f} TRX")
 
         if result.get("note"):
@@ -169,9 +196,9 @@ elif is_tron:
         # Summary
         st.divider()
         if result["is_contract"]:
-            st.success("**Summary:** This address is a **Smart Contract**.")
+            st.success(f"**Summary:** This address is a **Smart Contract**. (Confidence: {result['confidence']}%)")
         else:
-            st.info("**Summary:** This address is a **Wallet** (not a smart contract).")
+            st.info(f"**Summary:** This address is a **Wallet** (not a smart contract). (Confidence: {result['confidence']}%)")
 
 st.divider()
 
