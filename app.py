@@ -204,7 +204,12 @@ def get_evm_tx_sender(network_name: str, rpc_url: str, tx_hash: str) -> dict:
 
         # Check if this is an ERC-4337 transaction
         if to_address and to_address.lower() in ERC4337_ENTRYPOINTS:
-            input_data = tx.get("input", "")
+            input_data = tx.get("input", b"")
+            # Convert HexBytes to hex string if needed
+            if hasattr(input_data, 'hex'):
+                input_data = "0x" + input_data.hex()
+            elif isinstance(input_data, bytes):
+                input_data = "0x" + input_data.hex()
             userop_sender = parse_erc4337_sender(input_data)
             if userop_sender:
                 from_address = userop_sender
