@@ -139,6 +139,16 @@ if is_evm:
     st.divider()
     st.code(Web3.to_checksum_address(address_input), language=None)
 
+    # Summary
+    successful_results = [r for r in results if "error" not in r]
+    if successful_results:
+        is_any_contract = any(r["is_contract"] for r in successful_results)
+        avg_confidence = sum(r["confidence"] for r in successful_results) / len(successful_results)
+        if is_any_contract:
+            st.success(f"**Summary:** This address is a **Smart Contract** on at least one network. (Confidence: {avg_confidence:.0f}%)")
+        else:
+            st.info(f"**Summary:** This address is a **Wallet** (not a smart contract on any checked network). (Confidence: {avg_confidence:.0f}%)")
+
     for result in results:
         if "error" in result:
             st.warning(f"**{result['network']}**: Could not connect")
@@ -156,17 +166,6 @@ if is_evm:
             with col4:
                 st.write(f"{result['balance']:.6f}")
 
-    # Summary
-    successful_results = [r for r in results if "error" not in r]
-    if successful_results:
-        is_any_contract = any(r["is_contract"] for r in successful_results)
-        avg_confidence = sum(r["confidence"] for r in successful_results) / len(successful_results)
-        st.divider()
-        if is_any_contract:
-            st.success(f"**Summary:** This address is a **Smart Contract** on at least one network. (Confidence: {avg_confidence:.0f}%)")
-        else:
-            st.info(f"**Summary:** This address is a **Wallet** (not a smart contract on any checked network). (Confidence: {avg_confidence:.0f}%)")
-
 elif is_tron:
     with st.spinner("Checking Tron network..."):
         result = check_tron_address(address_input)
@@ -177,6 +176,12 @@ elif is_tron:
     if "error" in result:
         st.error(f"Error: {result['error']}")
     else:
+        # Summary
+        if result["is_contract"]:
+            st.success(f"**Summary:** This address is a **Smart Contract**. (Confidence: {result['confidence']}%)")
+        else:
+            st.info(f"**Summary:** This address is a **Wallet** (not a smart contract). (Confidence: {result['confidence']}%)")
+
         col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
         with col1:
             st.write(f"**{result['network']}**")
@@ -192,13 +197,6 @@ elif is_tron:
 
         if result.get("note"):
             st.caption(result["note"])
-
-        # Summary
-        st.divider()
-        if result["is_contract"]:
-            st.success(f"**Summary:** This address is a **Smart Contract**. (Confidence: {result['confidence']}%)")
-        else:
-            st.info(f"**Summary:** This address is a **Wallet** (not a smart contract). (Confidence: {result['confidence']}%)")
 
 st.divider()
 
