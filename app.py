@@ -20,6 +20,18 @@ evm_networks = {
     "Base": "https://mainnet.base.org",
 }
 
+# ERC-4337 EntryPoint contracts
+ERC4337_ENTRYPOINTS = {
+    "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",  # v0.6
+    "0x0000000071727de22e5e9d8baf0edac6f37da032",  # v0.7
+}
+
+# handleOps function selectors
+HANDLE_OPS_SELECTORS = {
+    "0x1fad948c",  # v0.6 handleOps
+    "0x765e827f",  # v0.7 handleOps
+}
+
 def is_valid_evm_address(address: str) -> bool:
     """Check if the address is a valid EVM address format."""
     if not address:
@@ -133,6 +145,49 @@ def check_all_evm_networks(address: str) -> list:
             results.append(future.result())
     return sorted(results, key=lambda x: x["network"])
 
+def parse_erc4337_sender(input_data: str) -> str | None:
+    """Extract the UserOp sender from ERC-4337 handleOps calldata."""
+    try:
+        # Check if this is a handleOps call
+        if len(input_data) < 10:
+            return None
+
+        selector = input_data[:10].lower()
+        if selector not in HANDLE_OPS_SELECTORS:
+            return None
+
+        # handleOps(UserOperation[] ops, address beneficiary)
+        # After selector (4 bytes), we have:
+        # - offset to ops array (32 bytes)
+        # - beneficiary address (32 bytes)
+        # At ops array offset:
+        # - array length (32 bytes)
+        # - offset to first UserOp (32 bytes)
+        # At first UserOp:
+        # - sender address (first 32 bytes, address is in last 20 bytes)
+
+        data = input_data[10:]  # Remove selector
+
+        # Get offset to ops array (first 32 bytes = 64 hex chars)
+        ops_offset = int(data[:64], 16) * 2  # Convert to hex char offset
+
+        # At ops array: first 32 bytes is array length
+        ops_data = data[ops_offset:]
+
+        # Next 32 bytes is offset to first UserOp
+        first_op_offset = int(ops_data[64:128], 16) * 2
+
+        # Get first UserOp data
+        first_op_data = ops_data[64 + first_op_offset:]
+
+        # First field of UserOp is sender (address in last 20 bytes of 32-byte word)
+        sender_word = first_op_data[:64]
+        sender = "0x" + sender_word[-40:]
+
+        return Web3.to_checksum_address(sender)
+    except Exception:
+        return None
+
 def get_evm_tx_sender(network_name: str, rpc_url: str, tx_hash: str) -> dict:
     """Get the sender address of an EVM transaction."""
     try:
@@ -142,10 +197,24 @@ def get_evm_tx_sender(network_name: str, rpc_url: str, tx_hash: str) -> dict:
             return {"network": network_name, "error": "Connection failed"}
 
         tx = w3.eth.get_transaction(tx_hash)
+
+        from_address = tx["from"]
+        to_address = tx.get("to")
+        is_erc4337 = False
+
+        # Check if this is an ERC-4337 transaction
+        if to_address and to_address.lower() in ERC4337_ENTRYPOINTS:
+            input_data = tx.get("input", "")
+            userop_sender = parse_erc4337_sender(input_data)
+            if userop_sender:
+                from_address = userop_sender
+                is_erc4337 = True
+
         return {
             "network": network_name,
-            "from_address": tx["from"],
-            "to_address": tx.get("to"),
+            "from_address": from_address,
+            "to_address": to_address,
+            "is_erc4337": is_erc4337,
         }
     except Exception as e:
         return {"network": network_name, "error": str(e)}
@@ -316,7 +385,14 @@ with tab2:
 
             st.code(tx_input, language=None)
             st.write(f"**Found on:** {network}")
-            st.write(f"**From:** `{from_address}`")
+
+            # Check if it's an ERC-4337 transaction
+            is_erc4337 = tx_info.get("is_erc4337", False)
+            if is_erc4337:
+                st.write(f"**From (Smart Wallet):** `{from_address}`")
+                st.caption("This is an ERC-4337 Account Abstraction transaction. Showing the smart wallet sender, not the bundler.")
+            else:
+                st.write(f"**From:** `{from_address}`")
 
             # Now check if the from address is a contract
             with st.spinner(f"Checking if sender is a smart contract on {network}..."):
