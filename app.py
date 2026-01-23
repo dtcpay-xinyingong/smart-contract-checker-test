@@ -427,9 +427,9 @@ with tab2:
             else:
                 # Summary
                 if address_result["is_contract"]:
-                    st.success(f"**Summary:** The sender is a **Smart Contract**. (Confidence: {address_result['confidence']}%)")
+                    st.success(f"**Summary:** The sender (`{from_address}`) is a **Smart Contract**. (Confidence: {address_result['confidence']}%)")
                 else:
-                    st.info(f"**Summary:** The sender is a **Wallet** (not a smart contract). (Confidence: {address_result['confidence']}%)")
+                    st.info(f"**Summary:** The sender (`{from_address}`) is a **Wallet** (not a smart contract). (Confidence: {address_result['confidence']}%)")
 
                 col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
                 with col1:
