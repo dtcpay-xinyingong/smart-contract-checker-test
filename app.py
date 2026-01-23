@@ -201,17 +201,23 @@ def get_evm_tx_sender(network_name: str, rpc_url: str, tx_hash: str) -> dict:
         from_address = Web3.to_checksum_address(tx["from"])
         to_address = tx.get("to")
         is_erc4337 = False
+        bundler_address = None
 
         # Check if this is an ERC-4337 transaction
-        if to_address and to_address.lower() in ERC4337_ENTRYPOINTS:
+        # Convert to_address to string for comparison
+        to_address_str = str(to_address).lower() if to_address else ""
+        if to_address_str in ERC4337_ENTRYPOINTS:
             input_data = tx.get("input", b"")
-            # Convert HexBytes to hex string if needed
+            # Convert HexBytes/bytes to hex string if needed
             if hasattr(input_data, 'hex'):
                 input_data = "0x" + input_data.hex()
             elif isinstance(input_data, bytes):
                 input_data = "0x" + input_data.hex()
+            elif isinstance(input_data, str) and not input_data.startswith("0x"):
+                input_data = "0x" + input_data
             userop_sender = parse_erc4337_sender(input_data)
             if userop_sender:
+                bundler_address = from_address  # Store the bundler before overwriting
                 from_address = userop_sender
                 is_erc4337 = True
 
@@ -220,6 +226,7 @@ def get_evm_tx_sender(network_name: str, rpc_url: str, tx_hash: str) -> dict:
             "from_address": from_address,
             "to_address": to_address,
             "is_erc4337": is_erc4337,
+            "bundler_address": bundler_address,
         }
     except Exception as e:
         return {"network": network_name, "error": str(e)}
@@ -393,11 +400,19 @@ with tab2:
 
             # Check if it's an ERC-4337 transaction
             is_erc4337 = tx_info.get("is_erc4337", False)
+            to_address = tx_info.get("to_address")
             if is_erc4337:
+                bundler_address = tx_info.get("bundler_address")
                 st.write(f"**From (Smart Wallet):** `{from_address}`")
-                st.caption("This is an ERC-4337 Account Abstraction transaction. Showing the smart wallet sender, not the bundler.")
+                if bundler_address:
+                    st.write(f"**From (Bundler):** `{bundler_address}`")
+                if to_address:
+                    st.write(f"**To (EntryPoint):** `{to_address}`")
+                st.caption("This is an ERC-4337 Account Abstraction transaction.")
             else:
                 st.write(f"**From:** `{from_address}`")
+                if to_address:
+                    st.write(f"**To:** `{to_address}`")
 
             # Now check if the from address is a contract
             with st.spinner(f"Checking if sender is a smart contract on {network}..."):
