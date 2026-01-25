@@ -391,6 +391,17 @@ with tab1:
             else:
                 st.info(f"**Summary:** This address is a **Wallet** (not a smart contract on any checked network). (Confidence: {avg_confidence:.0f}%)")
 
+        # Table header
+        col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
+        with col1:
+            st.caption("Network")
+        with col2:
+            st.caption("Type")
+        with col3:
+            st.caption("Confidence")
+        with col4:
+            st.caption("Balance")
+
         for result in results:
             if "error" in result:
                 st.warning(f"**{result['network']}**: Could not connect")
@@ -423,6 +434,17 @@ with tab1:
                 st.success(f"**Summary:** This address is a **Smart Contract**. (Confidence: {result['confidence']}%)")
             else:
                 st.info(f"**Summary:** This address is a **Wallet** (not a smart contract). (Confidence: {result['confidence']}%)")
+
+            # Table header
+            col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
+            with col1:
+                st.caption("Network")
+            with col2:
+                st.caption("Type")
+            with col3:
+                st.caption("Confidence")
+            with col4:
+                st.caption("Balance")
 
             col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
             with col1:
@@ -501,6 +523,17 @@ with tab2:
                     st.success(f"**Summary:** The sender (`{from_address}`) is a **Smart Contract**. (Confidence: {address_result['confidence']}%)")
                 else:
                     st.info(f"**Summary:** The sender (`{from_address}`) is a **Wallet** (not a smart contract). (Confidence: {address_result['confidence']}%)")
+
+                # Table header
+                col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
+                with col1:
+                    st.caption("Network")
+                with col2:
+                    st.caption("Type")
+                with col3:
+                    st.caption("Confidence")
+                with col4:
+                    st.caption("Balance")
 
                 col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
                 with col1:
