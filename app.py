@@ -3,34 +3,58 @@ from web3 import Web3
 import re
 import concurrent.futures
 import requests
+import json
+import os
 
-st.set_page_config(page_title="Smart Contract Checker", page_icon="🔍")
+# Default configuration (used if config.json is missing)
+DEFAULT_CONFIG = {
+    "evm_networks": {
+        "Ethereum": "https://eth.llamarpc.com",
+        "Polygon": "https://polygon-rpc.com",
+        "BSC": "https://bsc-dataseed.binance.org",
+        "Arbitrum": "https://arb1.arbitrum.io/rpc",
+        "Optimism": "https://mainnet.optimism.io",
+        "Avalanche": "https://api.avax.network/ext/bc/C/rpc",
+        "Base": "https://mainnet.base.org",
+    },
+    "tron": {
+        "api_base_url": "https://api.trongrid.io"
+    },
+    "erc4337": {
+        "entrypoints": [
+            "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
+            "0x0000000071727de22e5e9d8baf0edac6f37da032"
+        ],
+        "handle_ops_selectors": [
+            "0x1fad948c",
+            "0x765e827f"
+        ]
+    }
+}
 
-st.title("Smart Contract Checker")
-st.write("Check if an address or transaction sender is a smart contract or a regular wallet.")
+def load_config():
+    """Load configuration from config.json, falling back to defaults."""
+    config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    try:
+        with open(config_path, "r") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return DEFAULT_CONFIG
+
+# Load configuration
+config = load_config()
 
 # EVM networks
-evm_networks = {
-    "Ethereum": "https://eth.llamarpc.com",
-    "Polygon": "https://polygon-rpc.com",
-    "BSC": "https://bsc-dataseed.binance.org",
-    "Arbitrum": "https://arb1.arbitrum.io/rpc",
-    "Optimism": "https://mainnet.optimism.io",
-    "Avalanche": "https://api.avax.network/ext/bc/C/rpc",
-    "Base": "https://mainnet.base.org",
-}
+evm_networks = config.get("evm_networks", DEFAULT_CONFIG["evm_networks"])
+
+# Tron API base URL
+TRON_API_BASE = config.get("tron", {}).get("api_base_url", "https://api.trongrid.io")
 
 # ERC-4337 EntryPoint contracts
-ERC4337_ENTRYPOINTS = {
-    "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",  # v0.6
-    "0x0000000071727de22e5e9d8baf0edac6f37da032",  # v0.7
-}
+ERC4337_ENTRYPOINTS = set(config.get("erc4337", {}).get("entrypoints", DEFAULT_CONFIG["erc4337"]["entrypoints"]))
 
 # handleOps function selectors
-HANDLE_OPS_SELECTORS = {
-    "0x1fad948c",  # v0.6 handleOps
-    "0x765e827f",  # v0.7 handleOps
-}
+HANDLE_OPS_SELECTORS = set(config.get("erc4337", {}).get("handle_ops_selectors", DEFAULT_CONFIG["erc4337"]["handle_ops_selectors"]))
 
 def is_valid_evm_address(address: str) -> bool:
     """Check if the address is a valid EVM address format."""
@@ -95,7 +119,7 @@ def check_tron_address(address: str) -> dict:
     try:
         # Check if it's a contract using the contract endpoint
         contract_response = requests.post(
-            "https://api.trongrid.io/wallet/getcontract",
+            f"{TRON_API_BASE}/wallet/getcontract",
             json={"value": address, "visible": True},
             timeout=10
         )
@@ -106,7 +130,7 @@ def check_tron_address(address: str) -> dict:
 
         # Get balance from account endpoint
         account_response = requests.get(
-            f"https://api.trongrid.io/v1/accounts/{address}",
+            f"{TRON_API_BASE}/v1/accounts/{address}",
             timeout=10
         )
         account_data = account_response.json()
@@ -235,7 +259,7 @@ def get_tron_tx_sender(tx_hash: str) -> dict:
     """Get the sender address of a Tron transaction."""
     try:
         response = requests.get(
-            f"https://api.trongrid.io/v1/transactions/{tx_hash}",
+            f"{TRON_API_BASE}/v1/transactions/{tx_hash}",
             timeout=10
         )
         data = response.json()
