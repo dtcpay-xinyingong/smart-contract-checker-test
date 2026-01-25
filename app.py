@@ -56,6 +56,53 @@ ERC4337_ENTRYPOINTS = set(config.get("erc4337", {}).get("entrypoints", DEFAULT_C
 # handleOps function selectors
 HANDLE_OPS_SELECTORS = set(config.get("erc4337", {}).get("handle_ops_selectors", DEFAULT_CONFIG["erc4337"]["handle_ops_selectors"]))
 
+st.set_page_config(page_title="Smart Contract Checker", page_icon="🔍")
+
+# Sidebar FAQ
+with st.sidebar:
+    st.header("FAQ")
+
+    with st.expander("How does this tool work?"):
+        st.markdown("""
+        This tool checks if **bytecode exists** at an address - the same method used by Etherscan and block explorers.
+
+        - **Has bytecode** → Smart Contract
+        - **No bytecode** → Wallet (EOA)
+        """)
+
+    with st.expander("Is it accurate?"):
+        st.markdown("""
+        **Yes, for most cases:**
+
+        | Scenario | Result |
+        |----------|--------|
+        | Deployed contract | ✅ Contract |
+        | Regular wallet | 💰 Wallet |
+        | Self-destructed contract | 💰 Wallet |
+        | Proxy contract | ✅ Contract |
+        | CREATE2 (not deployed) | 💰 Wallet |
+        """)
+
+    with st.expander("What is ERC-4337?"):
+        st.markdown("""
+        **Account Abstraction** allows smart contracts to act as wallets.
+
+        When you check an ERC-4337 transaction, this tool extracts the **actual sender** (smart wallet) from the bundler transaction.
+        """)
+
+    with st.expander("Why does a network fail?"):
+        st.markdown("""
+        Public RPCs may occasionally timeout or be rate-limited.
+
+        **Solution:** Try again in a few seconds.
+        """)
+
+    st.divider()
+    st.caption("Supported: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Base, Tron")
+
+st.title("Smart Contract Checker")
+st.write("Check if an address or transaction sender is a smart contract or a regular wallet.")
+
 def is_valid_evm_address(address: str) -> bool:
     """Check if the address is a valid EVM address format."""
     if not address:
@@ -470,27 +517,3 @@ with tab2:
                     unit = "TRX" if network == "Tron" else ""
                     st.write(f"{balance:.6f} {unit}".strip())
 
-st.divider()
-
-with st.expander("How accurate is this tool?"):
-    st.markdown("""
-    This tool checks if bytecode exists at an address - the same method used by Etherscan and Tronscan.
-
-    **EVM Networks (Ethereum, Polygon, BSC, etc.)**
-    | Scenario | Result | Accurate? |
-    |----------|--------|-----------|
-    | Deployed contract | ✅ Smart Contract | Yes |
-    | Regular wallet | 💰 Wallet | Yes |
-    | Self-destructed contract | 💰 Wallet | Yes (bytecode was deleted) |
-    | CREATE2 pre-computed address | 💰 Wallet | Yes (not yet deployed) |
-    | Proxy contract | ✅ Smart Contract | Yes (but logic lives elsewhere) |
-
-    **Tron**
-    | Scenario | Result | Accurate? |
-    |----------|--------|-----------|
-    | TRC-20/TRC-721 contract | ✅ Smart Contract | Yes |
-    | Regular wallet | 💰 Wallet | Yes |
-    | Never-used address | 💰 Wallet | Yes |
-
-    **Note:** Public RPCs may occasionally timeout or fail. If a network shows "Could not connect", try again.
-    """)
