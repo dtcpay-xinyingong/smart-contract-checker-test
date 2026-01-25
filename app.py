@@ -24,6 +24,28 @@ def save_feedback(entry: dict):
     with open(FEEDBACK_FILE, "w") as f:
         json.dump(feedback, f, indent=2)
 
+def track_recent_check(input_value: str, input_type: str, network: str, result: str):
+    """Track recent checks in session state (max 5)."""
+    if "recent_checks" not in st.session_state:
+        st.session_state["recent_checks"] = []
+
+    entry = {
+        "input": input_value,
+        "type": input_type,
+        "network": network,
+        "result": result,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    # Remove duplicate if exists
+    st.session_state["recent_checks"] = [
+        c for c in st.session_state["recent_checks"] if c["input"] != input_value
+    ]
+
+    # Add to front and keep max 5
+    st.session_state["recent_checks"].insert(0, entry)
+    st.session_state["recent_checks"] = st.session_state["recent_checks"][:5]
+
 # Default configuration (used if config.json is missing)
 DEFAULT_CONFIG = {
     "evm_networks": {
@@ -377,7 +399,7 @@ def find_tx_on_all_networks(tx_hash: str) -> dict:
     return results
 
 # Create tabs
-tab1, tab2, tab3 = st.tabs(["Address Check", "Transaction Check", "Reported Issues"])
+tab1, tab2, tab3, tab4 = st.tabs(["Address Check", "Transaction Check", "Report Discrepancy", "Past Reported Discrepancies"])
 
 with tab1:
     # Address input
@@ -437,15 +459,14 @@ with tab1:
                 with col4:
                     st.write(f"{result['balance']:.6f}")
 
-        # Report button for EVM address
-        st.divider()
-        if st.button("Report incorrect result", key="report_evm"):
-            st.session_state["pending_report"] = {
-                "type": "address",
-                "input": address_input,
-                "network": "EVM (multiple)",
-                "tool_result": "Contract" if any(r.get("is_contract") for r in successful_results) else "Wallet"
-            }
+        # Track this check for reporting
+        is_contract = any(r.get("is_contract") for r in successful_results)
+        track_recent_check(
+            Web3.to_checksum_address(address_input),
+            "address",
+            "EVM (multiple)",
+            "Contract" if is_contract else "Wallet"
+        )
 
     elif is_tron:
         with st.spinner("Checking Tron network..."):
@@ -490,15 +511,13 @@ with tab1:
             if result.get("note"):
                 st.caption(result["note"])
 
-            # Report button for Tron address
-            st.divider()
-            if st.button("Report incorrect result", key="report_tron"):
-                st.session_state["pending_report"] = {
-                    "type": "address",
-                    "input": address_input,
-                    "network": "Tron",
-                    "tool_result": "Contract" if result["is_contract"] else "Wallet"
-                }
+            # Track this check for reporting
+            track_recent_check(
+                address_input,
+                "address",
+                "Tron",
+                "Contract" if result["is_contract"] else "Wallet"
+            )
 
 with tab2:
     # Transaction hash input
@@ -588,22 +607,19 @@ with tab2:
                     unit = "TRX" if network == "Tron" else ""
                     st.write(f"{balance:.6f} {unit}".strip())
 
-                # Report button for transaction
-                st.divider()
-                if st.button("Report incorrect result", key="report_tx"):
-                    st.session_state["pending_report"] = {
-                        "type": "transaction",
-                        "input": tx_input,
-                        "network": network,
-                        "from_address": from_address,
-                        "tool_result": "Contract" if address_result["is_contract"] else "Wallet"
-                    }
+                # Track this check for reporting
+                track_recent_check(
+                    tx_input,
+                    "transaction",
+                    network,
+                    "Contract" if address_result["is_contract"] else "Wallet"
+                )
 
 with tab3:
-    st.subheader("Reported Issues")
+    st.subheader("Report Discrepancy")
     st.write("Help improve accuracy by reporting incorrect results.")
 
-    # Show pending report confirmation
+    # Check if we're in confirmation mode
     if "pending_report" in st.session_state:
         report = st.session_state["pending_report"]
         st.warning(f"**Confirm report:** The result for `{report['input']}` is incorrect?")
@@ -613,28 +629,28 @@ with tab3:
             correct_answer = st.radio(
                 "What should the correct result be?",
                 ["Contract", "Wallet"],
-                index=0 if report["tool_result"] == "Wallet" else 1,
+                index=0 if report.get("tool_result") == "Wallet" else 1,
                 key="correct_answer"
             )
         with col2:
-            st.write("")  # Spacer
-            st.write(f"**Tool said:** {report['tool_result']}")
+            st.write("")
+            if report.get("tool_result"):
+                st.write(f"**Tool said:** {report['tool_result']}")
             st.write(f"**Network:** {report.get('network', 'Unknown')}")
+            st.write(f"**Type:** {report.get('type', 'address').title()}")
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Confirm Report", type="primary"):
                 entry = {
                     "timestamp": datetime.now().isoformat(),
-                    "type": report["type"],
+                    "type": report.get("type", "address"),
                     "input": report["input"],
-                    "network": report.get("network"),
-                    "tool_result": report["tool_result"],
+                    "network": report.get("network", "Unknown"),
+                    "tool_result": report.get("tool_result", "Unknown"),
                     "correct_result": correct_answer,
                     "status": "pending"
                 }
-                if report["type"] == "transaction":
-                    entry["from_address"] = report.get("from_address")
                 save_feedback(entry)
                 del st.session_state["pending_report"]
                 st.success("Report submitted! Thank you for helping improve accuracy.")
@@ -644,20 +660,73 @@ with tab3:
                 del st.session_state["pending_report"]
                 st.rerun()
 
-    st.divider()
+    else:
+        # Show recent checks with checkboxes
+        recent_checks = st.session_state.get("recent_checks", [])
 
-    # Show feedback history
+        if recent_checks:
+            st.write("**Select from recent checks:**")
+            selected_check = None
+
+            for i, check in enumerate(recent_checks):
+                label = f"`{check['input'][:30]}{'...' if len(check['input']) > 30 else ''}` - {check['result']} ({check['network']})"
+                if st.checkbox(label, key=f"check_{i}"):
+                    selected_check = check
+
+            if selected_check:
+                if st.button("Report Selected", type="primary"):
+                    st.session_state["pending_report"] = {
+                        "input": selected_check["input"],
+                        "type": selected_check["type"],
+                        "network": selected_check["network"],
+                        "tool_result": selected_check["result"]
+                    }
+                    st.rerun()
+
+            st.divider()
+
+        # Manual entry option
+        st.write("**Or enter manually:**")
+        manual_input = st.text_input(
+            "Address or Transaction Hash",
+            placeholder="0x... or T...",
+            key="manual_report_input"
+        )
+        manual_type = st.radio(
+            "Type",
+            ["Address", "Transaction"],
+            horizontal=True,
+            key="manual_report_type"
+        )
+
+        if manual_input:
+            if st.button("Report This", type="secondary"):
+                st.session_state["pending_report"] = {
+                    "input": manual_input,
+                    "type": manual_type.lower(),
+                    "network": "Unknown",
+                    "tool_result": "Unknown"
+                }
+                st.rerun()
+
+with tab4:
+    st.subheader("Past Reported Discrepancies")
+
     feedback = load_feedback()
     if feedback:
-        st.write(f"**{len(feedback)} reported issue(s)**")
-        for i, entry in enumerate(reversed(feedback)):
-            with st.expander(f"{entry['input'][:20]}... ({entry['timestamp'][:10]})"):
-                st.write(f"**Type:** {entry['type'].title()}")
-                st.write(f"**Input:** `{entry['input']}`")
-                st.write(f"**Network:** {entry.get('network', 'Unknown')}")
-                st.write(f"**Tool said:** {entry['tool_result']}")
-                st.write(f"**Correct result:** {entry['correct_result']}")
-                st.write(f"**Status:** {entry.get('status', 'pending')}")
+        st.write(f"**{len(feedback)} reported discrepancy(s)**")
+
+        for entry in reversed(feedback):
+            with st.expander(f"{entry['input'][:30]}{'...' if len(entry['input']) > 30 else ''} ({entry['timestamp'][:10]})"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.write(f"**Type:** {entry['type'].title()}")
+                    st.write(f"**Network:** {entry.get('network', 'Unknown')}")
+                    st.write(f"**Status:** {entry.get('status', 'pending').title()}")
+                with col2:
+                    st.write(f"**Tool said:** {entry.get('tool_result', 'Unknown')}")
+                    st.write(f"**Correct result:** {entry['correct_result']}")
+                st.code(entry['input'], language=None)
     else:
-        st.info("No issues reported yet. Use the 'Report incorrect result' button after checking an address or transaction.")
+        st.info("No discrepancies reported yet. Check an address or transaction, then report any incorrect results in the 'Report Discrepancy' tab.")
 
