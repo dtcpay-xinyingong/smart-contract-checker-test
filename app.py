@@ -172,6 +172,9 @@ with st.sidebar:
         """, unsafe_allow_html=True)
 
     st.divider()
+    st.caption("**Acknowledgement**")
+    st.caption("Smart Contract Verification: Idea contributed by Valencia")
+    st.divider()
     st.caption("Supported: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Base, Tron, Solana")
 
 st.title("Smart Contract Checker")
