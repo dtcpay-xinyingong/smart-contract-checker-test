@@ -60,6 +60,9 @@ DEFAULT_CONFIG = {
     "tron": {
         "api_base_url": "https://api.trongrid.io"
     },
+    "solana": {
+        "rpc_url": "https://api.mainnet-beta.solana.com"
+    },
     "erc4337": {
         "entrypoints": [
             "0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789",
@@ -89,6 +92,9 @@ evm_networks = config.get("evm_networks", DEFAULT_CONFIG["evm_networks"])
 
 # Tron API base URL
 TRON_API_BASE = config.get("tron", {}).get("api_base_url", "https://api.trongrid.io")
+
+# Solana RPC URL
+SOLANA_RPC_URL = config.get("solana", {}).get("rpc_url", "https://api.mainnet-beta.solana.com")
 
 # ERC-4337 EntryPoint contracts
 ERC4337_ENTRYPOINTS = set(config.get("erc4337", {}).get("entrypoints", DEFAULT_CONFIG["erc4337"]["entrypoints"]))
@@ -138,7 +144,7 @@ with st.sidebar:
         """)
 
     st.divider()
-    st.caption("Supported: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Base, Tron")
+    st.caption("Supported: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Base, Tron, Solana")
 
 st.title("Smart Contract Checker")
 st.write("Check if an address or transaction sender is a smart contract or a regular wallet.")
@@ -154,6 +160,14 @@ def is_valid_tron_address(address: str) -> bool:
     if not address:
         return False
     return bool(re.match(r"^T[a-zA-Z0-9]{33}$", address))
+
+def is_valid_solana_address(address: str) -> bool:
+    """Check if the address is a valid Solana address format."""
+    if not address:
+        return False
+    # Solana addresses are base58-encoded, typically 32-44 characters
+    # Valid base58 characters (no 0, O, I, l)
+    return bool(re.match(r"^[1-9A-HJ-NP-Za-km-z]{32,44}$", address))
 
 def is_valid_evm_tx_hash(tx_hash: str) -> bool:
     """Check if the string is a valid EVM transaction hash format."""
@@ -243,6 +257,71 @@ def check_tron_address(address: str) -> dict:
         }
     except Exception as e:
         return {"network": "Tron", "error": str(e)}
+
+def check_solana_address(address: str) -> dict:
+    """Check if a Solana address is a program (smart contract)."""
+    try:
+        # Use getAccountInfo to check if it's a program
+        response = requests.post(
+            SOLANA_RPC_URL,
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "getAccountInfo",
+                "params": [
+                    address,
+                    {"encoding": "jsonParsed"}
+                ]
+            },
+            timeout=10
+        )
+        data = response.json()
+
+        if "error" in data:
+            return {"network": "Solana", "error": data["error"].get("message", "RPC error")}
+
+        result = data.get("result")
+        if not result or not result.get("value"):
+            # Account doesn't exist
+            return {
+                "network": "Solana",
+                "is_contract": False,
+                "balance": 0.0,
+                "confidence": 75,
+            }
+
+        account_info = result["value"]
+        owner = account_info.get("owner")
+        lamports = account_info.get("lamports", 0)
+        balance_sol = lamports / 1_000_000_000  # Convert lamports to SOL
+        executable = account_info.get("executable", False)
+
+        # Check if it's a program (executable or owned by program loaders)
+        program_loaders = [
+            "BPFLoader1111111111111111111111111111111111",
+            "BPFLoader2111111111111111111111111111111111",
+            "BPFLoaderUpgradeab1e11111111111111111111111",
+            "NativeLoader1111111111111111111111111111111",
+        ]
+
+        is_program = executable or owner in program_loaders
+
+        # Calculate confidence score
+        if is_program:
+            confidence = 100  # Executable or owned by loader = definitely a program
+        elif balance_sol > 0:
+            confidence = 95  # Not a program but has balance = very likely a wallet
+        else:
+            confidence = 75  # No indication of program, no balance = could be unused
+
+        return {
+            "network": "Solana",
+            "is_contract": is_program,
+            "balance": balance_sol,
+            "confidence": confidence,
+        }
+    except Exception as e:
+        return {"network": "Solana", "error": str(e)}
 
 def check_all_evm_networks(address: str) -> list:
     """Check address across all EVM networks in parallel."""
@@ -405,14 +484,15 @@ with tab1:
     # Address input
     address_input = st.text_input(
         "Enter Address",
-        placeholder="0x... (EVM) or T... (Tron)",
-        help="Enter a valid EVM address (0x...) or Tron address (T...)",
+        placeholder="0x... (EVM), T... (Tron), or Solana address",
+        help="Enter a valid EVM address (0x...), Tron address (T...), or Solana address",
         key="address_input"
     )
 
     # Auto-scan when valid address is entered
     is_evm = is_valid_evm_address(address_input)
     is_tron = is_valid_tron_address(address_input)
+    is_solana = is_valid_solana_address(address_input)
 
     if is_evm:
         with st.spinner("Checking across all EVM networks..."):
@@ -516,6 +596,54 @@ with tab1:
                 address_input,
                 "address",
                 "Tron",
+                "Contract" if result["is_contract"] else "Wallet"
+            )
+
+    elif is_solana:
+        with st.spinner("Checking Solana network..."):
+            result = check_solana_address(address_input)
+
+        st.divider()
+        st.code(address_input, language=None)
+
+        if "error" in result:
+            st.error(f"Error: {result['error']}")
+        else:
+            # Summary
+            if result["is_contract"]:
+                st.success(f"**Summary:** This address is a **Program (Smart Contract)**. (Confidence: {result['confidence']}%)")
+            else:
+                st.info(f"**Summary:** This address is a **Wallet** (not a program). (Confidence: {result['confidence']}%)")
+
+            # Table header
+            col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
+            with col1:
+                st.caption("Network")
+            with col2:
+                st.caption("Type")
+            with col3:
+                st.caption("Confidence")
+            with col4:
+                st.caption("Balance")
+
+            col1, col2, col3, col4 = st.columns([2, 2, 1, 2])
+            with col1:
+                st.write(f"**{result['network']}**")
+            with col2:
+                if result["is_contract"]:
+                    st.write("✅ Program")
+                else:
+                    st.write("💰 Wallet")
+            with col3:
+                st.write(f"{result['confidence']}%")
+            with col4:
+                st.write(f"{result['balance']:.9f} SOL")
+
+            # Track this check for reporting
+            track_recent_check(
+                address_input,
+                "address",
+                "Solana",
                 "Contract" if result["is_contract"] else "Wallet"
             )
 
