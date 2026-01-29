@@ -145,16 +145,31 @@ with st.sidebar:
 
     with st.expander("What do confidence levels mean?"):
         st.markdown("""
-        Confidence scores indicate how certain the tool is about the result:
+        <small>
 
-        | Confidence | Meaning |
-        |------------|---------|
-        | 100% | Bytecode/program exists - definitely a contract |
-        | 95% | No code but has balance - very likely a wallet |
-        | 75% | No code, no balance - could be unused address or CREATE2 pending |
+        Confidence scores indicate how certain we are about the classification:
 
-        **Note:** A 75% confidence wallet could be a pre-computed address that hasn't been deployed yet.
-        """)
+        **100% Confidence - Definitely a Contract/Program**
+        - Bytecode exists on-chain (EVM/Tron) OR account is executable/owned by program loader (Solana)
+        - This is definitive proof of a smart contract/program
+
+        **95% Confidence - Very Likely a Wallet**
+        - No bytecode/program code found
+        - Has balance (tokens/coins)
+        - Almost certainly a regular wallet/EOA that has been used
+
+        **75% Confidence - Probably a Wallet**
+        - No bytecode/program code found
+        - Zero balance (never used)
+        - Most likely an unused wallet address
+
+        **Network-Specific Notes:**
+        - **EVM Networks** (Ethereum, Polygon, BSC, etc.): A 75% confidence address could theoretically be a CREATE2 pre-computed address waiting for contract deployment, though this is rare.
+        - **Solana**: Uses Program Derived Addresses (PDAs), not CREATE2. A 75% confidence result is almost certainly just an unused wallet.
+        - **Tron**: Similar to EVM but CREATE2 is less common. 75% confidence is likely an unused wallet.
+
+        </small>
+        """, unsafe_allow_html=True)
 
     st.divider()
     st.caption("Supported: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Base, Tron, Solana")
