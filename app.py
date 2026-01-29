@@ -143,6 +143,19 @@ with st.sidebar:
         **Solution:** Try again in a few seconds.
         """)
 
+    with st.expander("What do confidence levels mean?"):
+        st.markdown("""
+        Confidence scores indicate how certain the tool is about the result:
+
+        | Confidence | Meaning |
+        |------------|---------|
+        | 100% | Bytecode/program exists - definitely a contract |
+        | 95% | No code but has balance - very likely a wallet |
+        | 75% | No code, no balance - could be unused address or CREATE2 pending |
+
+        **Note:** A 75% confidence wallet could be a pre-computed address that hasn't been deployed yet.
+        """)
+
     st.divider()
     st.caption("Supported: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche, Base, Tron, Solana")
 
