@@ -12,7 +12,7 @@
     "api_base_url": "https://api.trongrid.io"
   },
   "solana": {
-    "rpc_url": "https://api.mainnet-beta.solana.com"
+    "rpc_url": "https://api.mainnet.solana.com"
   },
   "erc4337": {
     "entrypoints": [

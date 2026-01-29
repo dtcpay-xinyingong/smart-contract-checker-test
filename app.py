@@ -61,7 +61,7 @@ DEFAULT_CONFIG = {
         "api_base_url": "https://api.trongrid.io"
     },
     "solana": {
-        "rpc_url": "https://api.mainnet-beta.solana.com"
+        "rpc_url": "https://api.mainnet.solana.com"
     },
     "erc4337": {
         "entrypoints": [
@@ -94,7 +94,7 @@ evm_networks = config.get("evm_networks", DEFAULT_CONFIG["evm_networks"])
 TRON_API_BASE = config.get("tron", {}).get("api_base_url", "https://api.trongrid.io")
 
 # Solana RPC URL
-SOLANA_RPC_URL = config.get("solana", {}).get("rpc_url", "https://api.mainnet-beta.solana.com")
+SOLANA_RPC_URL = config.get("solana", {}).get("rpc_url", "https://api.mainnet.solana.com")
 
 # ERC-4337 EntryPoint contracts
 ERC4337_ENTRYPOINTS = set(config.get("erc4337", {}).get("entrypoints", DEFAULT_CONFIG["erc4337"]["entrypoints"]))

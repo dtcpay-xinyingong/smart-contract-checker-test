@@ -54,7 +54,7 @@ EVM_NETWORKS = {
 
 TRON_API_BASE = "https://api.trongrid.io"
 
-SOLANA_RPC_URL = "https://api.mainnet-beta.solana.com"
+SOLANA_RPC_URL = "https://api.mainnet.solana.com"
 
 # Block explorer APIs
 EXPLORER_APIS = {
