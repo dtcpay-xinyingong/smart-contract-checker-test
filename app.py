@@ -136,6 +136,22 @@ with st.sidebar:
         When you check an ERC-4337 transaction, this tool extracts the **actual sender** (smart wallet) from the bundler transaction.
         """)
 
+    with st.expander("What is EIP-7702?"):
+        st.markdown("""
+        **EIP-7702 (Set Code for EOAs)** allows regular wallets to temporarily delegate execution to a smart contract.
+
+        - EOAs can set a delegation designator (`0xef0100 || address`)
+        - The wallet delegates its execution to another contract
+        - This enables smart contract features without full Account Abstraction
+
+        When detected, this tool shows the address as **"EOA with Delegation"** and displays the delegated contract address.
+
+        **Status Display:**
+        - 🔗 EOA with Delegation → Has EIP-7702 delegation designator
+        - ✅ Smart Contract → Has permanent contract bytecode
+        - 💰 Wallet → Regular EOA with no code
+        """)
+
     with st.expander("Why does a network fail?"):
         st.markdown("""
         Public RPCs may occasionally timeout or be rate-limited.
@@ -222,21 +238,37 @@ def check_evm_network(network_name: str, rpc_url: str, address: str) -> dict:
         code = w3.eth.get_code(checksum_address)
         balance = w3.eth.get_balance(checksum_address)
 
-        is_contract = len(code) > 0
         code_size = len(code)
         bal = float(w3.from_wei(balance, "ether"))
 
+        # Check for EIP-7702 delegation
+        is_eip7702 = False
+        delegated_to = None
+
+        if code_size == 23 and code[:3].hex() == "ef0100":
+            is_eip7702 = True
+            # Extract delegated address (bytes 3-23)
+            delegated_to = "0x" + code[3:23].hex()
+            delegated_to = Web3.to_checksum_address(delegated_to)
+
+        # Determine account type
+        is_contract = code_size > 0 and not is_eip7702  # Regular contract
+
         # Calculate confidence score
         if is_contract:
-            confidence = 100  # Bytecode exists = definitely a contract
+            confidence = 100  # Permanent bytecode = definitely a contract
+        elif is_eip7702:
+            confidence = 100  # EIP-7702 = definitely delegated EOA
         elif bal > 0:
             confidence = 95  # No code but has balance = very likely a wallet
         else:
-            confidence = 75  # No code, no balance = could be unused or CREATE2 pending
+            confidence = 75  # No code, no balance = could be unused
 
         return {
             "network": network_name,
             "is_contract": is_contract,
+            "is_eip7702": is_eip7702,
+            "delegated_to": delegated_to,
             "code_size": code_size,
             "balance": bal,
             "confidence": confidence,
@@ -534,9 +566,12 @@ with tab1:
         successful_results = [r for r in results if "error" not in r]
         if successful_results:
             is_any_contract = any(r["is_contract"] for r in successful_results)
+            is_any_eip7702 = any(r.get("is_eip7702", False) for r in successful_results)
             avg_confidence = sum(r["confidence"] for r in successful_results) / len(successful_results)
             if is_any_contract:
                 st.success(f"**Summary:** This address is a **Smart Contract** on at least one network. (Confidence: {avg_confidence:.0f}%)")
+            elif is_any_eip7702:
+                st.info(f"**Summary:** This address is an **EOA with EIP-7702 Delegation** on at least one network. (Confidence: {avg_confidence:.0f}%)")
             else:
                 st.info(f"**Summary:** This address is a **Wallet** (not a smart contract on any checked network). (Confidence: {avg_confidence:.0f}%)")
 
@@ -561,6 +596,8 @@ with tab1:
                 with col2:
                     if result["is_contract"]:
                         st.write("✅ Smart Contract")
+                    elif result.get("is_eip7702", False):
+                        st.write("🔗 EOA with Delegation")
                     else:
                         st.write("💰 Wallet")
                 with col3:
@@ -568,13 +605,24 @@ with tab1:
                 with col4:
                     st.write(f"{result['balance']:.6f}")
 
+                # Add delegation info if present
+                if result.get("is_eip7702") and result.get("delegated_to"):
+                    st.caption(f"   ↳ Delegated to: `{result['delegated_to']}`")
+
         # Track this check for reporting
         is_contract = any(r.get("is_contract") for r in successful_results)
+        is_eip7702 = any(r.get("is_eip7702", False) for r in successful_results)
+        if is_contract:
+            result_type = "Contract"
+        elif is_eip7702:
+            result_type = "EOA with Delegation"
+        else:
+            result_type = "Wallet"
         track_recent_check(
             Web3.to_checksum_address(address_input),
             "address",
             "EVM (multiple)",
-            "Contract" if is_contract else "Wallet"
+            result_type
         )
 
     elif is_tron:
@@ -590,6 +638,8 @@ with tab1:
             # Summary
             if result["is_contract"]:
                 st.success(f"**Summary:** This address is a **Smart Contract**. (Confidence: {result['confidence']}%)")
+            elif result.get("is_eip7702", False):
+                st.info(f"**Summary:** This address is an **EOA with EIP-7702 Delegation**. (Confidence: {result['confidence']}%)")
             else:
                 st.info(f"**Summary:** This address is a **Wallet** (not a smart contract). (Confidence: {result['confidence']}%)")
 
@@ -610,6 +660,8 @@ with tab1:
             with col2:
                 if result["is_contract"]:
                     st.write("✅ Smart Contract")
+                elif result.get("is_eip7702", False):
+                    st.write("🔗 EOA with Delegation")
                 else:
                     st.write("💰 Wallet")
             with col3:
@@ -617,15 +669,25 @@ with tab1:
             with col4:
                 st.write(f"{result['balance']:.6f} TRX")
 
+            # Add delegation info if present
+            if result.get("is_eip7702") and result.get("delegated_to"):
+                st.caption(f"   ↳ Delegated to: `{result['delegated_to']}`")
+
             if result.get("note"):
                 st.caption(result["note"])
 
             # Track this check for reporting
+            if result["is_contract"]:
+                result_type = "Contract"
+            elif result.get("is_eip7702", False):
+                result_type = "EOA with Delegation"
+            else:
+                result_type = "Wallet"
             track_recent_check(
                 address_input,
                 "address",
                 "Tron",
-                "Contract" if result["is_contract"] else "Wallet"
+                result_type
             )
 
     elif is_solana:
@@ -641,6 +703,8 @@ with tab1:
             # Summary
             if result["is_contract"]:
                 st.success(f"**Summary:** This address is a **Program (Smart Contract)**. (Confidence: {result['confidence']}%)")
+            elif result.get("is_eip7702", False):
+                st.info(f"**Summary:** This address is an **EOA with EIP-7702 Delegation**. (Confidence: {result['confidence']}%)")
             else:
                 st.info(f"**Summary:** This address is a **Wallet** (not a program). (Confidence: {result['confidence']}%)")
 
@@ -661,6 +725,8 @@ with tab1:
             with col2:
                 if result["is_contract"]:
                     st.write("✅ Program")
+                elif result.get("is_eip7702", False):
+                    st.write("🔗 EOA with Delegation")
                 else:
                     st.write("💰 Wallet")
             with col3:
@@ -668,12 +734,22 @@ with tab1:
             with col4:
                 st.write(f"{result['balance']:.9f} SOL")
 
+            # Add delegation info if present
+            if result.get("is_eip7702") and result.get("delegated_to"):
+                st.caption(f"   ↳ Delegated to: `{result['delegated_to']}`")
+
             # Track this check for reporting
+            if result["is_contract"]:
+                result_type = "Contract"
+            elif result.get("is_eip7702", False):
+                result_type = "EOA with Delegation"
+            else:
+                result_type = "Wallet"
             track_recent_check(
                 address_input,
                 "address",
                 "Solana",
-                "Contract" if result["is_contract"] else "Wallet"
+                result_type
             )
 
 with tab2:
@@ -735,6 +811,8 @@ with tab2:
                 # Summary
                 if address_result["is_contract"]:
                     st.success(f"**Summary:** The sender (`{from_address}`) is a **Smart Contract**. (Confidence: {address_result['confidence']}%)")
+                elif address_result.get("is_eip7702", False):
+                    st.info(f"**Summary:** The sender (`{from_address}`) is an **EOA with EIP-7702 Delegation** to `{address_result.get('delegated_to', 'unknown')}`. (Confidence: {address_result['confidence']}%)")
                 else:
                     st.info(f"**Summary:** The sender (`{from_address}`) is a **Wallet** (not a smart contract). (Confidence: {address_result['confidence']}%)")
 
@@ -755,6 +833,8 @@ with tab2:
                 with col2:
                     if address_result["is_contract"]:
                         st.write("✅ Smart Contract")
+                    elif address_result.get("is_eip7702", False):
+                        st.write("🔗 EOA with Delegation")
                     else:
                         st.write("💰 Wallet")
                 with col3:
@@ -764,12 +844,22 @@ with tab2:
                     unit = "TRX" if network == "Tron" else ""
                     st.write(f"{balance:.6f} {unit}".strip())
 
+                # Add delegation info if present
+                if address_result.get("is_eip7702") and address_result.get("delegated_to"):
+                    st.caption(f"   ↳ Delegated to: `{address_result['delegated_to']}`")
+
                 # Track this check for reporting
+                if address_result["is_contract"]:
+                    result_type = "Contract"
+                elif address_result.get("is_eip7702", False):
+                    result_type = "EOA with Delegation"
+                else:
+                    result_type = "Wallet"
                 track_recent_check(
                     tx_input,
                     "transaction",
                     network,
-                    "Contract" if address_result["is_contract"] else "Wallet"
+                    result_type
                 )
 
 with tab3:
